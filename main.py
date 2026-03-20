@@ -28,7 +28,6 @@ def load_trip_ids(path: str) -> set[str]:
     ids = {t.strip() for t in raw.split(",") if t.strip()}
     if not ids:
         sys.exit(f"[ERROR] No trip IDs found in '{path}'")
-    print(f"[INFO] Loaded {len(ids)} trip ID(s) from '{path}'")
     return ids
 
 
@@ -36,7 +35,6 @@ def load_stations(path: str) -> tuple[str, str]:
     lines = [l.strip() for l in Path(path).read_text().splitlines() if l.strip()]
     if len(lines) != 2:
         sys.exit(f"[ERROR] '{path}' must contain exactly 2 stop IDs, found {len(lines)}")
-    print(f"[INFO] Watching stops: '{lines[0]}'  and  '{lines[1]}'")
     return lines[0], lines[1]
 
 
@@ -47,13 +45,11 @@ def load_logged(path: str) -> set[str]:
     if not p.exists():
         return set()
     ids = {l.strip() for l in p.read_text().splitlines() if l.strip()}
-    print(f"[INFO] Loaded {len(ids)} already-logged trip ID(s) from '{path}'")
     return ids
 
 
 def save_logged(path: str, already_logged: set[str]) -> None:
     Path(path).write_text("\n".join(sorted(already_logged)) + "\n" if already_logged else "")
-    print(f"[INFO] Saved {len(already_logged)} logged trip ID(s) to '{path}'")
 
 
 # ── GTFS-RT fetch ─────────────────────────────────────────────────────────────
@@ -112,8 +108,6 @@ def check_feed(
                 t = stop_time(stu)
                 if t:
                     stop_a_times[trip_id] = t
-                    human = datetime.fromtimestamp(t).strftime("%H:%M:%S")
-                    print(f"  [STOP_A] trip={trip_id}  departure={human} ({t})")
 
             elif sid == stop_b and trip_id in stop_a_times and trip_id not in already_logged:
                 t = arrival_time(stu)
@@ -124,7 +118,6 @@ def check_feed(
 
     expired = (stop_a_times.keys() | already_logged) - active_in_feed
     if expired:
-        print(f"  [RESET] {len(expired)} trip(s) left the feed: {expired}")
         for tid in expired:
             stop_a_times.pop(tid, None)
             already_logged.discard(tid)
@@ -139,7 +132,6 @@ def append_duration(path: str, trip_id: str, duration: int) -> None:
     line = f"{duration}    # trip_id={trip_id}  ({mins}m {secs}s)\n"
     with open(path, "a") as fh:
         fh.write(line)
-    print(f"  [LOGGED] {line.strip()}")
 
 
 # ── single run ────────────────────────────────────────────────────────────────
@@ -152,18 +144,11 @@ def run() -> None:
 
     Path(OUTPUT_FILE).touch()
 
-    print(f"\n[INFO] Feed: {FEED_URL}")
-    print(f"[INFO] Run at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-
     try:
         feed = fetch_feed(FEED_URL)
-        feed_ts = feed.header.timestamp
-        print(f"[POLL] feed_timestamp={feed_ts}  entities={len(feed.entity)}")
-
         matches = check_feed(feed, trip_ids, stop_a, stop_b, stop_a_times, already_logged)
 
         if matches:
-            print(f"  [HIT] {len(matches)} trip(s) completed both stops!")
             for trip_id, duration in matches:
                 append_duration(OUTPUT_FILE, trip_id, duration)
         else:
